@@ -17,10 +17,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
@@ -156,11 +157,59 @@ server_tcp (uint16_t listen_port, const char *file)
   return 0;
 }
 
-int
-server_microtcp (uint16_t listen_port, const char *file)
+int server_microtcp(uint16_t server_port, const char *file)
 {
-  /*TODO: Write your code here */
-  return 0;
+    microtcp_sock_t sock;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len;
+    
+    // Socket creation (IPv4 - UDP)
+    sock = microtcp_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock.state == INVALID) {
+        fprintf(stderr, "[BANDWIDTH-SERVER] socket creation failed\n");
+        return -EXIT_FAILURE;
+    }
+    
+    // Bind
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(server_port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    
+    printf("[BANDWIDTH-SERVER] Binding to port %d...\n", server_port);
+    if (microtcp_bind(&sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        fprintf(stderr, "[BANDWIDTH-SERVER] bind failed\n");
+        close(sock.sd);
+        return -EXIT_FAILURE;
+    }
+    
+    printf("[BANDWIDTH-SERVER] Listening on port %d...\n", server_port);
+    sock.state = LISTEN;
+    
+    sleep(3);
+    
+    // Accept connection
+    printf("[BANDWIDTH-SERVER] Waiting for client connection...\n");
+    sleep(3);
+    client_len = sizeof(client_addr);
+    
+    if (microtcp_accept(&sock, (struct sockaddr*)&client_addr, &client_len) < 0) {
+        fprintf(stderr, "[BANDWIDTH-SERVER] Accept failed\n");
+        close(sock.sd);
+        return -EXIT_FAILURE;
+    }
+    
+    printf("[BANDWIDTH-SERVER] Client connected successfully from %s:%d!\n", 
+           inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    
+    
+    sleep(3);
+    
+    // Close socket
+    close(sock.sd);
+    printf("[BANDWIDTH-SERVER] Socket closed\n");
+    
+    return 0;
 }
 
 int
@@ -245,11 +294,50 @@ client_tcp (const char *serverip, uint16_t server_port, const char *file)
   return 0;
 }
 
-int
-client_microtcp (const char *serverip, uint16_t server_port, const char *file)
+int client_microtcp(const char *serverip, uint16_t server_port, const char *file)
 {
-  /*TODO: Write your code here */
-  return 0;
+    microtcp_sock_t sock;
+    struct sockaddr_in server_addr;
+    
+    printf("[BANDWIDTH-CLIENT] Server IP provided: %s\n", serverip);
+    
+    // Socket creation
+    sock = microtcp_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock.state == INVALID) {
+        fprintf(stderr, "[BANDWIDTH-CLIENT] socket creation failed\n");
+        return -EXIT_FAILURE;
+    }
+    
+    // Set up server address
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(server_port);
+    
+    // Χρήση inet_aton() που είναι πιο ασφαλής
+    if (inet_aton(serverip, &server_addr.sin_addr) == 0) {
+        fprintf(stderr, "[BANDWIDTH-CLIENT] ERROR: Invalid IP address: %s\n", serverip);
+        close(sock.sd);
+        return -EXIT_FAILURE;
+    }
+    
+    printf("[BANDWIDTH-CLIENT] Connecting to server: %s, port: %d\n", 
+           inet_ntoa(server_addr.sin_addr), server_port);
+    
+    if (microtcp_connect(&sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        fprintf(stderr, "[BANDWIDTH-CLIENT] Connection failed\n");
+        close(sock.sd);
+        return -EXIT_FAILURE;
+    }
+    
+    printf("[BANDWIDTH-CLIENT] Connected successfully to %s:%d!\n", 
+           inet_ntoa(server_addr.sin_addr), server_port);
+    
+    sleep(3);
+    
+    close(sock.sd);
+    printf("[BANDWIDTH-CLIENT] Socket closed!\n\n");
+    
+    return 0;
 }
 
 int

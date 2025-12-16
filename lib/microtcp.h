@@ -82,6 +82,8 @@ typedef struct
   uint64_t bytes_send;
   uint64_t bytes_received;
   uint64_t bytes_lost;
+  struct sockaddr_storage peer_addr;
+  socklen_t peer_addr_len;
 } microtcp_sock_t;
 
 
