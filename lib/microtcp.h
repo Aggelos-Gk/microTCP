@@ -22,6 +22,8 @@
 #define LIB_MICROTCP_H_
 
 #include <sys/types.h>
+#include <sys/time.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <stdint.h>
 
@@ -84,6 +86,13 @@ typedef struct
   uint64_t bytes_lost;
   struct sockaddr_storage peer_addr;
   socklen_t peer_addr_len;
+
+  int cc_state;           // 0=SLOW_START, 1=CONGESTION_AVOIDANCE
+    int dup_ack_count;        // Πόσα duplicate ACKs έχουμε λάβει
+  size_t last_ack_received; // Τελευταίο ack number που λάβαμε
+    size_t peer_win_size;
+
+
 } microtcp_sock_t;
 
 

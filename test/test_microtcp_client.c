@@ -18,62 +18,147 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * You can use this file to write a test microTCP client.
- * This file is already inserted at the build system.
- */
-
 #include "../lib/microtcp.h"
+#include "../utils/crc32.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#define BUFFER_SIZE 8192
+#define TEST_DATA_SIZE 102400  // 100 KB για δοκιμή
+
 int main() {
     microtcp_sock_t sock;
     struct sockaddr_in server_addr;
-    int shutdown = 0;
+    uint8_t *send_buffer;
+    ssize_t bytes_sent;
+    size_t total_sent = 0;
+    size_t remaining;
     
-    // socket creation (IPv4 - UDP)
+    /* ==================== ΔΗΜΙΟΥΡΓΙΑ SOCKET ==================== */
+    printf("[CLIENT] Creating microTCP socket...\n");
     sock = microtcp_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock.state == INVALID) {
-        fprintf(stderr, "[CLIENT] socket creation failed\n");
+        fprintf(stderr, "[CLIENT] Socket creation failed\n");
         return -1;
     }
-    
-    // Server address that client will connect with
+    printf("[CLIENT] Socket created successfully (sd=%d)\n", sock.sd);
+
+    /* ==================== ΔΙΕΥΘΥΝΣΗ SERVER ==================== */
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(12345);
     server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     
-    // Connect
-    printf("[CLIENT] Connecting to server: %s, port: %d\n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+    /* ==================== CONNECT TO SERVER ==================== */
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] Connecting to %s:%d\n", 
+           inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+    printf("[CLIENT] ========================================\n");
+    
     if (microtcp_connect(&sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        fprintf(stderr, "Connection failed\n");
+        fprintf(stderr, "[CLIENT] Connection failed\n");
         close(sock.sd);
         return -1;
     }
     
-    printf("[CLIENT] Connected successfully to %s:%d!\n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port)); 
-    sleep(1);
-    
-    // Shutdown
-    printf("[CLIENT] Do you want to shutdown?\n    No  = 0\n    Yes = 1\n");
-    scanf("%d", &shutdown);
-    while (shutdown == 0){
-        printf("[CLIENT] Do you want to shutdown?\n    No  = 0\n    Yes = 1\n");
-        scanf("%d", &shutdown);
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] CONNECTED SUCCESSFULLY!\n");
+    printf("[CLIENT] ========================================\n\n");
+
+    /* ==================== ΔΗΜΙΟΥΡΓΙΑ TEST DATA ==================== */
+    printf("[CLIENT] Preparing test data (%d bytes)...\n", TEST_DATA_SIZE);
+    send_buffer = malloc(TEST_DATA_SIZE);
+    if (!send_buffer) {
+        fprintf(stderr, "[CLIENT] Failed to allocate send buffer\n");
+        microtcp_shutdown(&sock, SHUT_RDWR);
+        return -1;
     }
+    
+    // Γέμισμα buffer με test data (pattern: 0-255 επαναλαμβανόμενο)
+    for (size_t i = 0; i < TEST_DATA_SIZE; i++) {
+        send_buffer[i] = i % 256;
+    }
+    printf("[CLIENT] Test data prepared\n\n");
+
+    /* ==================== ΑΠΟΣΤΟΛΗ ΔΕΔΟΜΕΝΩΝ ==================== */
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] Starting data transmission...\n");
+    printf("[CLIENT] Total to send: %d bytes\n", TEST_DATA_SIZE);
+    printf("[CLIENT] ========================================\n\n");
+    
+    remaining = TEST_DATA_SIZE;
+    
+    // Αποστολή σε chunks
+    while (total_sent < TEST_DATA_SIZE) {
+        size_t chunk_size = (remaining > BUFFER_SIZE) ? BUFFER_SIZE : remaining;
+        
+        printf("[CLIENT] Sending chunk: %zu bytes (progress: %zu/%d)\n",
+               chunk_size, total_sent, TEST_DATA_SIZE);
+        
+        bytes_sent = microtcp_send(&sock, send_buffer + total_sent, chunk_size, 0);
+        
+        if (bytes_sent < 0) {
+            fprintf(stderr, "[CLIENT] Error sending data\n");
+            free(send_buffer);
+            microtcp_shutdown(&sock, SHUT_RDWR);
+            return -1;
+        }
+        
+        if (bytes_sent == 0) {
+            fprintf(stderr, "[CLIENT] Warning: 0 bytes sent\n");
+            continue;
+        }
+        
+        total_sent += bytes_sent;
+        remaining -= bytes_sent;
+        
+        printf("[CLIENT] Sent %zd bytes successfully (total: %zu/%d)\n\n",
+               bytes_sent, total_sent, TEST_DATA_SIZE);
+    }
+    
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] DATA TRANSMISSION COMPLETED\n");
+    printf("[CLIENT] Total bytes sent: %zu\n", total_sent);
+    printf("[CLIENT] Packets sent: %lu, received: %lu, lost: %lu\n",
+           sock.packets_send, sock.packets_received, sock.packets_lost);
+    printf("[CLIENT] ========================================\n\n");
+
+    /* ==================== ΚΑΘΑΡΙΣΜΟΣ BUFFER ==================== */
+    free(send_buffer);
+
+    /* ==================== USER CONFIRMATION FOR SHUTDOWN ==================== */
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] Data transmission complete.\n");
+    printf("[CLIENT] Press ENTER to initiate shutdown...\n");
+    printf("[CLIENT] ========================================\n");
+    getchar();  // Clear input buffer
+    getchar();  // Wait for user
+
+    /* ==================== SHUTDOWN CONNECTION ==================== */
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] Initiating connection shutdown...\n");
+    printf("[CLIENT] ========================================\n");
     
     if (microtcp_shutdown(&sock, SHUT_RDWR) < 0) {
-        fprintf(stderr, "[CLIENT]Shutdown failed - exit from connection\n");
+        fprintf(stderr, "[CLIENT] Shutdown failed\n");
         close(sock.sd);
         return -1;
     }
     
-    printf("[CLIENT] Shutdown completed successfully!\n\n");
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] SHUTDOWN COMPLETED SUCCESSFULLY\n");
+    printf("[CLIENT] ========================================\n");
+    printf("[CLIENT] Final statistics:\n");
+    printf("[CLIENT]   - Packets sent: %lu\n", sock.packets_send);
+    printf("[CLIENT]   - Packets received: %lu\n", sock.packets_received);
+    printf("[CLIENT]   - Packets lost: %lu\n", sock.packets_lost);
+    printf("[CLIENT]   - Bytes sent: %lu\n", sock.bytes_send);
+    printf("[CLIENT]   - Bytes received: %lu\n", sock.bytes_received);
+    printf("[CLIENT] ========================================\n");
     
     return 0;
 }
