@@ -171,14 +171,14 @@ int server_microtcp(uint16_t server_port, const char *file)
     struct timespec start_time;
     struct timespec end_time;
     
-    /* ==================== ΔΗΜΙΟΥΡΓΙΑ BUFFER ==================== */
+    // buffer creation
     buffer = (uint8_t*)malloc(CHUNK_SIZE);
     if (!buffer) {
         perror("[microTCP Server] Allocate application receive buffer");
         return -EXIT_FAILURE;
     }
     
-    /* ==================== ΑΝΟΙΓΜΑ ΑΡΧΕΙΟΥ ==================== */
+    // open file write bytes
     fp = fopen(file, "wb");
     if (!fp) {
         perror("[microTCP Server] Open file for writing");
@@ -186,7 +186,7 @@ int server_microtcp(uint16_t server_port, const char *file)
         return -EXIT_FAILURE;
     }
     
-    /* ==================== ΔΗΜΙΟΥΡΓΙΑ SOCKET ==================== */
+    // socket creation
     sock = microtcp_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock.state == INVALID) {
         fprintf(stderr, "[microTCP Server] Socket creation failed\n");
@@ -195,7 +195,7 @@ int server_microtcp(uint16_t server_port, const char *file)
         return -EXIT_FAILURE;
     }
     
-    /* ==================== BIND ==================== */
+    // bind
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(server_port);
@@ -209,9 +209,9 @@ int server_microtcp(uint16_t server_port, const char *file)
         return -EXIT_FAILURE;
     }
     
-    printf("[microTCP Server] Listening on port %d...\n", server_port);
+    //printf("[microTCP Server] Listening on port %d...\n", server_port);
     
-    /* ==================== ACCEPT CONNECTION ==================== */
+    // accept connection
     client_len = sizeof(client_addr);
     if (microtcp_accept(&sock, (struct sockaddr*)&client_addr, client_len) < 0) {
         fprintf(stderr, "[microTCP Server] Accept failed\n");
@@ -221,107 +221,98 @@ int server_microtcp(uint16_t server_port, const char *file)
         return -EXIT_FAILURE;
     }
     
-    printf("[microTCP Server] Client connected from %s:%d\n", 
-           inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    //printf("[microTCP Server] Client connected from %s:%d\n", 
+           //inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
     
-/* ==================== ΛΗΨΗ ΔΕΔΟΜΕΝΩΝ ==================== */
-printf("[microTCP Server] Starting data reception...\n");
+  // receive data
+  //printf("[microTCP Server] Starting data reception...\n");
 
-// Έναρξη μέτρησης χρόνου
-clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
+  // get time
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
 
-// Λήψη δεδομένων σε βρόχο
-while (sock.state == ESTABLISHED) {
-    memset(buffer, 0, CHUNK_SIZE);
-    
-    bytes_received = microtcp_recv(&sock, buffer, CHUNK_SIZE, 0);
-    
-    // ΠΡΩΤΑ: Έλεγχος αν η σύνδεση κλείνει
-    if (sock.state == CLOSING_BY_PEER) {
-        printf("[microTCP Server] Connection closing by peer (FIN received)\n");
-        
-        // ΑΝ υπάρχουν δεδομένα που λήφθηκαν μαζί με το FIN
-        if (bytes_received > 0) {
-            written = fwrite(buffer, sizeof(uint8_t), bytes_received, fp);
-            total_bytes += bytes_received;
-            printf("[microTCP Server] Flushed final %zd bytes (total: %zu bytes)\n",
-                   bytes_received, total_bytes);
-        }
-        
-        break;
-    }
-    
-    // ΔΕΥΤΕΡΟ: Έλεγχος για σφάλματα
-    if (bytes_received < 0) {
-        fprintf(stderr, "[microTCP Server] Error receiving data\n");
-        break;
-    }
-    
-    if (bytes_received == 0) {
-    if (sock.state == CLOSING_BY_PEER) {
-        printf("[microTCP Server] Connection closed by peer\n");
-    } else {
-        printf("[microTCP Server] No data received, waiting...\n");
-    }
-    break;  // Μην κάνεις continue εδώ, αλλιώς κολλάει
-}
-    
-    // ΤΕΤΑΡΤΟ: Εγγραφή στο αρχείο
-    written = fwrite(buffer, sizeof(uint8_t), bytes_received, fp);
-    total_bytes += bytes_received;
-    
-    if (written != bytes_received) {
-        fprintf(stderr, "[microTCP Server] Failed to write to file\n");
-        break;
-    }
-    
-    // Εκτύπωση προόδου
-    printf("[microTCP Server] Received %zd bytes (total: %zu bytes)\n", 
-           bytes_received, total_bytes);
-    
-    // Προαιρετικά: εκτύπωση δείγματος δεδομένων (πρώτα 50 bytes)
-    printf("[microTCP Server] Sample data: ");
-    size_t sample_size = (bytes_received < 50) ? bytes_received : 50;
-    for (size_t i = 0; i < sample_size; i++) {
-        if (buffer[i] >= 32 && buffer[i] <= 126) {
-            printf("%c", buffer[i]);
-        } else {
-            printf(".");
-        }
-    }
-    if (bytes_received > 0) {
-        printf("...");
-    }
-    printf("\n\n");
-}
+  // while for receiving bytes
+  while (sock.state == ESTABLISHED) {
+      memset(buffer, 0, CHUNK_SIZE);
+      
+      bytes_received = microtcp_recv(&sock, buffer, CHUNK_SIZE, 0);
+      
+      // check if shutdown
+      if (sock.state == CLOSING_BY_PEER) {
+          //printf("[microTCP Server] Connection closing by peer (FIN received)\n");
+          
+          // check if we have data with FIN
+          if (bytes_received > 0) {
+              written = fwrite(buffer, sizeof(uint8_t), bytes_received, fp);
+              total_bytes += bytes_received;
+              //printf("[microTCP Server] Flushed final %zd bytes (total: %zu bytes)\n",
+                    //bytes_received, total_bytes);
+          }
+          
+          break;
+      }
+      
+      // check for byte error
+      if (bytes_received < 0) {
+          fprintf(stderr, "[microTCP Server] Error receiving data\n");
+          break;
+      }
+      
+      if (bytes_received == 0) {
+      if (sock.state == CLOSING_BY_PEER) {
+          //printf("[microTCP Server] Connection closed by peer\n");
+      } else {
+          //printf("[microTCP Server] No data received, waiting...\n");
+      }
+      break;  // Μην κάνεις continue εδώ, αλλιώς κολλάει
+  }
+      
+      // write to file
+      written = fwrite(buffer, sizeof(uint8_t), bytes_received, fp);
+      total_bytes += bytes_received;
+      
+      if (written != bytes_received) {
+          fprintf(stderr, "[microTCP Server] Failed to write to file\n");
+          break;
+      }
+      
+      //printf("[microTCP Server] Received %zd bytes (total: %zu bytes)\n", 
+            //bytes_received, total_bytes);
+      
+  }
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+  double elapsed =
+    (end_time.tv_sec - start_time.tv_sec) +
+    (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
 
-if (sock.state == CLOSING_BY_PEER) {
-    // Ο peer έχει στείλει FIN, ήδη έχουμε στείλει ACK στο microtcp_recv
-    printf("[microTCP Server] Connection closed by peer\n");
+  double megabytes = total_bytes / (1024.0 * 1024.0);
+  printf("[microTCP Server] Data received: %.2f MB\n", megabytes);
+  printf("[microTCP Server] Transfer Time: %.3f seconds\n", elapsed);
+  printf("[microTCP Server] Throughput achieved: %.2f MB/s\n", megabytes / elapsed);
 
-    // Προαιρετικά: στείλε το δικό σου FIN για τυπικό 2-way handshake
-    microtcp_header_t fin_hdr;
-    memset(&fin_hdr, 0, sizeof(fin_hdr));
-    fin_hdr.seq_number = htonl(sock.seq_number);
-    fin_hdr.ack_number = htonl(sock.ack_number);
-    fin_hdr.control = htons((1 << 15) | (1 << 12)); // FIN + ACK
-    fin_hdr.window = htons(sock.curr_win_size);
-    fin_hdr.data_len = 0;
-    fin_hdr.future_use0 = 0;
-    fin_hdr.future_use1 = 0;
-    fin_hdr.future_use2 = 0;
-    fin_hdr.checksum = 0;
-    fin_hdr.checksum = crc32((uint8_t*)&fin_hdr, sizeof(microtcp_header_t));
+  if (sock.state == CLOSING_BY_PEER) {
 
-    sendto(sock.sd, &fin_hdr, sizeof(fin_hdr), 0,
-           (struct sockaddr*)&sock.peer_addr, sock.peer_addr_len);
+      //printf("[microTCP Server] Connection closed by peer\n");
 
-    // Τερματίζουμε το socket χωρίς να περιμένουμε ACK από τον peer
-    sock.state = CLOSED;
-}
+      // send FIN
+      microtcp_header_t fin_hdr;
+      memset(&fin_hdr, 0, sizeof(fin_hdr));
+      fin_hdr.seq_number = htonl(sock.seq_number);
+      fin_hdr.ack_number = htonl(sock.ack_number);
+      fin_hdr.control = htons((1 << 15) | (1 << 12)); // FIN + ACK
+      fin_hdr.window = htons(sock.curr_win_size);
+      fin_hdr.data_len = 0;
+      fin_hdr.future_use0 = 0;
+      fin_hdr.future_use1 = 0;
+      fin_hdr.future_use2 = 0;
+      fin_hdr.checksum = 0;
+      fin_hdr.checksum = crc32((uint8_t*)&fin_hdr, sizeof(microtcp_header_t));
 
-    
-    /* ==================== ΚΑΘΑΡΙΣΜΟΣ ==================== */
+      sendto(sock.sd, &fin_hdr, sizeof(fin_hdr), 0,
+            (struct sockaddr*)&sock.peer_addr, sock.peer_addr_len);
+
+      sock.state = CLOSED;
+  }
+
     if (sock.recvbuf) {
         free(sock.recvbuf);
     }
@@ -329,7 +320,7 @@ if (sock.state == CLOSING_BY_PEER) {
     fclose(fp);
     free(buffer);
     
-    printf("[microTCP Server] Connection closed\n");
+    //printf("[microTCP Server] Connection closed\n");
     
     return 0;
 }
@@ -425,14 +416,14 @@ int client_microtcp(const char *serverip, uint16_t server_port, const char *file
     size_t read_items;
     ssize_t data_sent;
     
-    /* ==================== ΔΗΜΙΟΥΡΓΙΑ BUFFER ==================== */
+    // create buffer
     buffer = (uint8_t*)malloc(CHUNK_SIZE);
     if (!buffer) {
         perror("[microTCP Client] Allocate application send buffer");
         return -EXIT_FAILURE;
     }
     
-    /* ==================== ΑΝΟΙΓΜΑ ΑΡΧΕΙΟΥ ==================== */
+    // open file to read
     fp = fopen(file, "r");
     if (!fp) {
         perror("[microTCP Client] Open file for reading");
@@ -440,7 +431,7 @@ int client_microtcp(const char *serverip, uint16_t server_port, const char *file
         return -EXIT_FAILURE;
     }
     
-    /* ==================== ΔΗΜΙΟΥΡΓΙΑ SOCKET ==================== */
+    // create socker
     sock = microtcp_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock.state == INVALID) {
         fprintf(stderr, "[microTCP Client] Socket creation failed\n");
@@ -462,8 +453,8 @@ int client_microtcp(const char *serverip, uint16_t server_port, const char *file
         return -EXIT_FAILURE;
     }
     
-    /* ==================== CONNECT TO SERVER ==================== */
-    printf("[microTCP Client] Connecting to %s:%d\n", serverip, server_port);
+    // connect to server
+    //printf("[microTCP Client] Connecting to %s:%d\n", serverip, server_port);
     
     if (microtcp_connect(&sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         fprintf(stderr, "[microTCP Client] Connection failed\n");
@@ -473,18 +464,18 @@ int client_microtcp(const char *serverip, uint16_t server_port, const char *file
         return -EXIT_FAILURE;
     }
     
-    printf("[microTCP Client] Connected successfully!\n");
+    //printf("[microTCP Client] Connected successfully!\n");
     
-    /* ==================== ΑΠΟΣΤΟΛΗ ΔΕΔΟΜΕΝΩΝ ==================== */
-    printf("[microTCP Client] Starting sending data...\n");
+    // send data
+    //printf("[microTCP Client] Starting sending data...\n");
     
-    // Αποστολή δεδομένων σε βρόχο
+    // send data from file 
     while (!feof(fp)) {
         read_items = fread(buffer, sizeof(uint8_t), CHUNK_SIZE, fp);
         
         if (read_items < 1) {
             if (feof(fp)) {
-                break;  // Τέλος αρχείου
+                break;
             }
             perror("[microTCP Client] Failed read from file");
             microtcp_shutdown(&sock, SHUT_RDWR);
@@ -504,21 +495,20 @@ int client_microtcp(const char *serverip, uint16_t server_port, const char *file
         }
     }
     
-    printf("[microTCP Client] Data sent. Terminating...\n");
+    //printf("[microTCP Client] Data sent. Terminating...\n");
     
-    /* ==================== SHUTDOWN CONNECTION ==================== */
+    // shutdown connection
     if (microtcp_shutdown(&sock, SHUT_RDWR) < 0) {
         fprintf(stderr, "[microTCP Client] Shutdown failed\n");
     }
     
-    /* ==================== ΚΑΘΑΡΙΣΜΟΣ ==================== */
     if (sock.recvbuf) {
         free(sock.recvbuf);
     }
     fclose(fp);
     free(buffer);
     
-    printf("[microTCP Client] Connection closed\n");
+    //printf("[microTCP Client] Connection closed\n");
     
     return 0;
 }
